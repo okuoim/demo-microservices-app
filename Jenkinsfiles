@@ -1,0 +1,115 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Build Frontend Image') {
+            steps {
+                script {
+                    docker.build("frontend:latest", "./frontend")
+                }
+            }
+        }
+
+        stage('Build Backend Image') {
+            steps {
+                script {
+                    docker.build("backend:latest", "./backend")
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    // Assuming you have kubectl configured and pointing to your Kubernetes cluster
+
+                    // Apply frontend deployment
+                    sh '''
+                    kubectl apply -f - <<EOF
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: frontend
+                    spec:
+                      replicas: 1
+                      selector:
+                        matchLabels:
+                          app: frontend
+                      template:
+                        metadata:
+                          labels:
+                            app: frontend
+                        spec:
+                          containers:
+                          - name: frontend
+                            image: frontend:latest
+                            ports:
+                            - containerPort: 80
+                    EOF
+                    '''
+
+                    // Apply backend deployment
+                    sh '''
+                    kubectl apply -f - <<EOF
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: backend
+                    spec:
+                      replicas: 1
+                      selector:
+                        matchLabels:
+                          app: backend
+                      template:
+                        metadata:
+                          labels:
+                            app: backend
+                        spec:
+                          containers:
+                          - name: backend
+                            image: backend:latest
+                            ports:
+                            - containerPort: 3000
+                    EOF
+                    '''
+                    
+                    // Apply frontend service
+                    sh '''
+                    kubectl apply -f - <<EOF
+                    apiVersion: v1
+                    kind: Service
+                    metadata:
+                      name: frontend
+                    spec:
+                      selector:
+                        app: frontend
+                      ports:
+                      - protocol: TCP
+                        port: 80
+                        targetPort: 80
+                      type: LoadBalancer
+                    EOF
+                    '''
+
+                    // Apply backend service
+                    sh '''
+                    kubectl apply -f - <<EOF
+                    apiVersion: v1
+                    kind: Service
+                    metadata:
+                      name: backend
+                    spec:
+                      selector:
+                        app: backend
+                      ports:
+                      - protocol: TCP
+                        port: 3000
+                        targetPort: 3000
+                      type: ClusterIP
+                    EOF
+                    '''
+                }
+            }
+        }
+    }
+}
